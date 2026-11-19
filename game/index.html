@@ -1,19 +1,111 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>NEON HARBOR — an open-world crime game</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#0b1020;
+    font-family:Verdana,Arial,sans-serif;color:#fff;}
+  #game{position:fixed;inset:0;display:block;}
+  .hidden{display:none !important;}
+  /* HUD */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:5;}
+  #topleft{position:absolute;top:12px;left:12px;}
+  #healthbar{width:220px;height:16px;background:rgba(0,0,0,.55);border:2px solid #fff3;border-radius:8px;overflow:hidden;}
+  #healthfill{height:100%;width:100%;background:linear-gradient(90deg,#37e08b,#a5ff6b);}
+  #cash{margin-top:6px;font-size:22px;font-weight:bold;color:#7dffb0;text-shadow:2px 2px 0 #000;}
+  #stars{margin-top:4px;font-size:26px;letter-spacing:4px;color:#ffd23f;text-shadow:2px 2px 0 #000;}
+  #stars .off{color:rgba(255,255,255,.25);}
+  #ammo{margin-top:6px;font-size:18px;font-weight:bold;text-shadow:2px 2px 0 #000;}
+  #speed{position:absolute;bottom:14px;right:16px;font-size:34px;font-weight:bold;text-shadow:2px 2px 0 #000;}
+  #speed small{font-size:14px;}
+  #objective{position:absolute;top:12px;left:50%;transform:translateX(-50%);max-width:560px;
+    background:rgba(0,0,0,.55);border:1px solid #ff5da2;padding:8px 16px;border-radius:8px;
+    font-size:15px;text-align:center;}
+  #objective b{color:#ff9ec7;}
+  #feed{position:absolute;left:12px;bottom:14px;max-width:380px;font-size:14px;line-height:1.5;
+    text-shadow:1px 1px 0 #000;}
+  #feed div{background:rgba(0,0,0,.45);border-radius:6px;padding:2px 8px;margin-top:4px;display:inline-block;}
+  #minimap{position:absolute;right:12px;top:12px;border:2px solid rgba(255,255,255,.6);border-radius:8px;
+    background:#0a1a2e;box-shadow:0 0 0 2px rgba(0,0,0,.4);}
+  #crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:22px;
+    color:#fff;text-shadow:0 0 4px #000;}
+  #hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:14px;
+    background:rgba(0,0,0,.6);padding:6px 14px;border-radius:8px;}
+  #wasted{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;background:rgba(20,0,0,.45);}
+  #wasted h1{font-size:64px;margin:0;letter-spacing:8px;color:#ff2e4d;text-shadow:4px 4px 0 #000;}
+  #wasted p{font-size:18px;text-shadow:2px 2px 0 #000;}
+  /* Screens */
+  .screen{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;text-align:center;
+    background:linear-gradient(160deg,#12082e 0%,#3b0f4f 45%,#0b2a4a 100%);}
+  .screen h1{font-size:72px;margin:0;letter-spacing:6px;color:#ff5da2;
+    text-shadow:0 0 24px #ff5da2,4px 4px 0 #000;}
+  .screen h2{font-size:22px;margin:6px 0 18px;color:#7de8ff;letter-spacing:3px;font-weight:normal;}
+  .screen p{max-width:640px;font-size:15px;line-height:1.6;color:#e8e8ff;margin:6px 0;}
+  .screen .keys{font-size:13px;color:#c9c9e8;line-height:1.9;}
+  .screen button{pointer-events:auto;margin-top:22px;font-size:20px;font-weight:bold;cursor:pointer;
+    color:#fff;background:#ff2e7d;border:3px solid #fff;padding:14px 42px;border-radius:10px;
+    box-shadow:0 0 24px #ff2e7d;}
+  .screen button.alt{background:#0b6fa4;box-shadow:0 0 18px #0b6fa4;}
+  .screen .small{font-size:12px;color:#9a9ac0;margin-top:18px;}
+  #err{position:fixed;left:0;bottom:0;z-index:99;color:#f66;font-size:11px;background:#000;padding:2px 6px;}
 </style>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="topleft">
+    <div id="healthbar"><div id="healthfill"></div></div>
+    <div id="cash">$0</div>
+    <div id="stars"></div>
+    <div id="ammo"></div>
+  </div>
+  <div id="objective"><b id="objtitle">NEON HARBOR</b><br><span id="objtext"></span></div>
+  <canvas id="minimap" width="190" height="190"></canvas>
+  <div id="feed"></div>
+  <div id="speed" class="hidden">0 <small>mph</small></div>
+  <div id="crosshair" class="hidden">+</div>
+  <div id="hint" class="hidden"></div>
+  <div id="wasted" class="hidden"><h1 id="wastedtitle">WASTED</h1><p id="wastedsub"></p></div>
+</div>
+
+<div id="startscreen" class="screen">
+  <h1>NEON HARBOR</h1>
+  <h2>AN OPEN-WORLD CRIME STORY</h2>
+  <p>Danny "D" Marlowe is back in Neon Harbor — broke, in debt, and out of options.
+  His old fixer, Auntie Bea, has work. Steal cars, dodge the Harbor PD, run jobs for
+  the crew, and settle the score with The Vipers. The whole city is yours.</p>
+  <p class="keys">WASD move &nbsp;·&nbsp; SHIFT run &nbsp;·&nbsp; MOUSE drag to look &nbsp;·&nbsp; E enter / exit car<br>
+  W/S drive &nbsp;·&nbsp; A/D steer &nbsp;·&nbsp; CLICK shoot &nbsp;·&nbsp; R reload &nbsp;·&nbsp; P pause &nbsp;·&nbsp; M mute</p>
+  <button id="startbtn">START ENGINE</button>
+  <button id="continuebtn" class="alt hidden">CONTINUE — SAVED GAME</button>
+  <p class="small">An original game. Neon Harbor, its people and its story are fiction — nothing here is from any other game.</p>
+</div>
+
+<div id="pausescreen" class="screen hidden">
+  <h1>PAUSED</h1>
+  <p>Neon Harbor waits for no one. Well — right now it does.</p>
+  <button id="resumebtn">RESUME</button>
+  <button id="savebtn" class="alt">SAVE GAME</button>
+  <button id="quitbtn" class="alt">QUIT TO TITLE</button>
+  <p class="small" id="savestate"></p>
+</div>
+
+<div id="winscreen" class="screen hidden">
+  <h1 style="color:#7dffb0;text-shadow:0 0 24px #37e08b,4px 4px 0 #000;">JOB DONE</h1>
+  <h2>THE LAST JOB — COMPLETE</h2>
+  <p id="wintext">Danny walks away clean. The Vipers are finished in Neon Harbor, Bea is paid,
+  and the harbor lights have never looked better. Thanks for playing.</p>
+  <button id="freeroambtn">KEEP EXPLORING — FREE ROAM</button>
+  <button id="winrestartbtn" class="alt">PLAY AGAIN</button>
+</div>
+
+<div id="err"></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
